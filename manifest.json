@@ -1,0 +1,44 @@
+{
+  "manifest_version": "0.3",
+  "name": "bronkit",
+  "display_name": "Bronkit (smoke test)",
+  "version": "0.1.2",
+  "description": "Bronkit MCPB bundle for Bron treasury operations: one MCP tool that calls the bundled bron CLI, plus nine skills (portfolio view, transactions, cost basis, DeFi reconstruction, staking opportunities, and admin operations). On first server boot, symlinks ~/.local/bin/bron to the bundled binary so skills can shell out to it.",
+  "author": {
+    "name": "Ilia Brovkin"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "BRON_API_KEY": "${user_config.bron_api_key}",
+        "BRON_WORKSPACE_ID": "${user_config.bron_workspace_id}"
+      }
+    }
+  },
+  "user_config": {
+    "bron_api_key": {
+      "type": "string",
+      "title": "Bron API key (raw JWK JSON)",
+      "description": "Paste the contents of your Bron JWK key file. Stored in the OS keychain.",
+      "sensitive": true,
+      "required": true
+    },
+    "bron_workspace_id": {
+      "type": "string",
+      "title": "Bron workspace ID",
+      "description": "UUID of the workspace this bundle should talk to.",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin"],
+    "runtimes": {
+      "node": ">=18"
+    }
+  }
+}

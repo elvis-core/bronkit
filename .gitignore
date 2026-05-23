@@ -1,0 +1,10 @@
+.DS_Store
+node_modules/
+dist/
+*.mcpb
+*.zip
+SESSION_LOG.md
+LESSONS.md
+STATUS.md
+TEST_REPORTS.md
+fix-specs/
