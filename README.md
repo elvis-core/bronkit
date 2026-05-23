@@ -49,6 +49,18 @@ Two steps. Both via Claude Desktop UI — no terminal needed.
 - **`bron-defi-positions` is approximate.** Bron's DeFi connectivity is via WalletConnect, not a native API. The skill reconstructs positions from transaction history — known incomplete coverage.
 - **macOS Apple Silicon only.** The installer is built for arm64 macOS. Other platforms will be added later.
 
+## Build from source
+
+Building Bronkit from a clean checkout needs Node 18 or newer on Apple Silicon macOS and nothing more — the `bron` CLI binary is committed to the repository, so there is no separate compilation step. Clone the repository, change into it, and run the build script:
+
+```bash
+git clone https://github.com/elvis-core/bronkit.git
+cd bronkit
+./build.sh
+```
+
+The script installs the server's npm dependencies and packages `manifest.json`, the `server/` directory (binary and dependencies included), the nine skills, and `.claude-plugin/` into `dist/bronkit.mcpb`, ready to install in Claude Desktop.
+
 ## Feedback
 
 You're the pilot cohort, and what you flag shapes v0.3.0. Please tell us what broke, what was confusing, and where the output didn't match what you expected — every report helps us tune the skills before wider release.
