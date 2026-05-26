@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
-# Build the Bronkit .mcpb bundle from a clean checkout.
-# Installs the server's npm dependencies, then packages the bundle into dist/.
+# Build the Bronkit .mcpb bundle. Pure Node — no native binary.
 set -euo pipefail
 
-# Resolve the repo root (this script's own directory) so the build runs from anywhere.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
 NAME="bronkit.mcpb"
 DIST="$ROOT/dist"
 
-echo "==> Installing server dependencies"
-( cd server && npm install )
+echo "==> Installing production dependencies"
+npm install --omit=dev --no-audit --no-fund
 
 echo "==> Assembling $NAME"
 mkdir -p "$DIST"
 rm -f "$DIST/$NAME"
-zip -r -q "$DIST/$NAME" manifest.json server/ skills/ .claude-plugin/
+# Bundle only what the server needs at runtime (no tests, no scripts, no dev cruft).
+zip -r -q "$DIST/$NAME" manifest.json package.json icon.png src/ config/ node_modules/ -x "*.DS_Store"
 
 echo "==> Built $DIST/$NAME ($(du -h "$DIST/$NAME" | cut -f1))"

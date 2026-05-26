@@ -1,0 +1,26 @@
+{
+  "name": "bronkit",
+  "version": "0.8.2",
+  "private": true,
+  "type": "module",
+  "description": "Bronkit — a Claude Desktop MCP server for Bron treasury operations.",
+  "license": "MIT",
+  "author": "Ilia Brovkin",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elvis-core/bronkit.git"
+  },
+  "homepage": "https://github.com/elvis-core/bronkit#readme",
+  "bugs": {
+    "url": "https://github.com/elvis-core/bronkit/issues"
+  },
+  "keywords": ["bron", "treasury", "crypto", "mcp", "portfolio", "cost-basis", "staking"],
+  "main": "src/server.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "decimal.js": "^10.4.3",
+    "jose": "^5.9.6"
+  }
+}
