@@ -1,18 +1,24 @@
 {
   "manifest_version": "0.3",
   "name": "bronkit",
-  "display_name": "Bronkit (smoke test)",
-  "version": "0.1.2",
-  "description": "Bronkit MCPB bundle for Bron treasury operations: one MCP tool that calls the bundled bron CLI, plus nine skills (portfolio view, transactions, cost basis, DeFi reconstruction, staking opportunities, and admin operations). On first server boot, symlinks ~/.local/bin/bron to the bundled binary so skills can shell out to it.",
+  "display_name": "Bronkit",
+  "version": "0.8.2",
+  "description": "MCP server for Bron treasury operations — USD-priced portfolio, FIFO cost basis & P&L, staking/yield opportunities, transactions, address book, and preview-first withdrawals. Talks to the Bron API directly over signed requests; no bundled binary.",
   "author": {
     "name": "Ilia Brovkin"
   },
+  "license": "MIT",
+  "icon": "icon.png",
+  "homepage": "https://github.com/elvis-core/bronkit",
+  "documentation": "https://github.com/elvis-core/bronkit#readme",
+  "support": "https://github.com/elvis-core/bronkit/issues",
+  "keywords": ["bron", "treasury", "crypto", "wallet", "mcp", "portfolio", "cost-basis", "staking"],
   "server": {
     "type": "node",
-    "entry_point": "server/index.js",
+    "entry_point": "src/server.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/server/index.js"],
+      "args": ["${__dirname}/src/server.js"],
       "env": {
         "BRON_API_KEY": "${user_config.bron_api_key}",
         "BRON_WORKSPACE_ID": "${user_config.bron_workspace_id}"
@@ -23,14 +29,14 @@
     "bron_api_key": {
       "type": "string",
       "title": "Bron API key (raw JWK JSON)",
-      "description": "Paste the contents of your Bron JWK key file. Stored in the OS keychain.",
+      "description": "Paste the contents of your Bron JWK key file. Held in the OS keychain and used in-memory only — never written to disk.",
       "sensitive": true,
       "required": true
     },
     "bron_workspace_id": {
       "type": "string",
       "title": "Bron workspace ID",
-      "description": "UUID of the workspace this bundle should talk to.",
+      "description": "UUID of the workspace this server talks to.",
       "sensitive": false,
       "required": true
     }
