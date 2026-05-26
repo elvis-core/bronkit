@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "bronkit",
   "display_name": "Bronkit",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "MCP server for Bron treasury operations — USD-priced portfolio, FIFO cost basis & P&L, staking/yield opportunities, transactions, address book, and preview-first withdrawals. Talks to the Bron API directly over signed requests; no bundled binary.",
   "author": {
     "name": "Ilia Brovkin"
