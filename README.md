@@ -34,30 +34,20 @@ Bronkit is a Claude Desktop extension that lets you operate your Bron treasury f
 
 20 curated tools in total — all annotated and intent-shaped.
 
-## Quickstart
-
 **Before you start:** a Bron workspace where you're an owner · macOS · Claude Desktop · ~5 minutes.
 
-1. [**Create a Bron API key**](#1-create-your-bron-api-key) on developer.bron.org.
-2. [**Copy your workspace ID**](#2-copy-your-workspace-id) from Bron Settings.
-3. [**Install Bronkit**](#3-install-bronkit) — download the `.mcpb` and double-click.
-4. [**Configure and try it**](#4-configure-and-first-call) — paste your key + workspace, ask Claude *"show my balance"*.
-
----
-
-## Detailed setup
+## Setup
 
 <details>
-<summary><b>1. Create your Bron API key</b></summary>
+<summary><b>1. Create your Bron API key</b> — in the Bron app</summary>
 <br>
 
 > 🔑 **Prerequisite (one-off): switch on API key creation in Bron.** If this is your first API key in this workspace, you may need to enable it first: **Settings → Security → Security policies → Other settings → Edit** → switch on **Enable API key creation** → **Save**. Skip if it's already on.
 
 Decide **where you'll save the key** before you generate it. A password manager, an encrypted note app, or a `.txt` / `.jwk` file in an encrypted folder all work. (The advice you may see to "save it to Notepad" just means any text editor — not a physical notepad.)
 
-1. Go to **developer.bron.org** and sign in.
-2. **Refresh the page** — ⌘R on macOS, Ctrl+R on Windows. Bron may show a 48-hour security delay notice; that notice applies to a different toggle (address-withdrawal lock), **not** to API keys. A new API key is active immediately after a refresh.
-3. Click **+ New API key** and fill in the form:
+1. In the **Bron app**, open **Settings → API keys**. *(If you just enabled the prerequisite above, refresh the page — ⌘R on macOS, Ctrl+R on Windows. Any 48-hour security notice applies to a different toggle, not API keys.)*
+2. Click **+ New API key** and fill in the form:
 
    | Field | Value |
    |---|---|
@@ -84,7 +74,7 @@ Decide **where you'll save the key** before you generate it. A password manager,
 </details>
 
 <details>
-<summary><b>2. Copy your workspace ID</b></summary>
+<summary><b>2. Copy your workspace ID</b> — from Bron Settings</summary>
 <br>
 
 In Bron, go to **Settings → Workspace details** and scroll to the bottom. Copy **Workspace ID** into the same secure place as your key.
@@ -100,7 +90,7 @@ Keep both — you'll need them at install time. After Bronkit is configured, you
 </details>
 
 <details>
-<summary><b>3. Install Bronkit</b></summary>
+<summary><b>3. Install Bronkit</b> — download the <code>.mcpb</code> and double-click</summary>
 <br>
 
 1. Download the latest **`bronkit.mcpb`** from [Releases](https://github.com/elvis-core/bronkit/releases/latest).
@@ -116,7 +106,7 @@ Keep both — you'll need them at install time. After Bronkit is configured, you
 </details>
 
 <details>
-<summary><b>4. Configure and first call</b></summary>
+<summary><b>4. Configure and first call</b> — paste your key + workspace, ask <i>"show my balance"</i></summary>
 <br>
 
 After install, Claude shows a **Configure** dialog with two fields, in this order:
