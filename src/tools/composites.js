@@ -199,4 +199,134 @@ export const stakingOpportunitiesTool = {
   },
 };
 
-export const compositeTools = [costBasisTool, stakingOpportunitiesTool];
+// Staking rewards — sum realised reward events per asset over a date range
+// (default YTD), plus a simple annualised APR estimate from principal staked in
+// the same window. Perf trick: filter at the API by transaction type + date
+// window so we pull ~10–60 stake-* tx rather than the full history (~500+).
+
+const REWARD_EVENT_TYPES = new Set(["stake-earn-reward", "stake-take-reward"]);
+const ACCRUED_EVENT_TYPE = "stake-reward-accrued";
+
+function defaultRewardsFrom() {
+  return new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOString();
+}
+
+async function fetchStakingHistory(ctx, { from, to }) {
+  const all = [];
+  const transactionTypes = "stake-claim,stake-earn-reward,stake-take-reward,stake-delegation,stake-undelegation";
+  for (let page = 0, offset = 0; page < MAX_PAGES; page++, offset += PAGE) {
+    const resp = await ctx.client.get(`${ws(ctx)}/transactions`, {
+      transactionStatuses: "completed,partially-completed",
+      transactionTypes,
+      createdAtFrom: from,
+      createdAtTo: to,
+      includeEvents: true,
+      limit: PAGE,
+      offset,
+    });
+    const txs = (resp && resp.transactions) || [];
+    all.push(...txs);
+    if (txs.length < PAGE) break;
+  }
+  return all;
+}
+
+export const stakingRewardsTool = {
+  name: "bron_staking_rewards",
+  title: "Staking rewards & yield",
+  description:
+    "Per-asset staking rewards earned over a date range, plus a simple annualised APR estimate. Defaults to year-to-date (Jan 1 of the current year → now). Read-only. Use for 'staking rewards', 'yield earned', 'how much I made on staking', 'staking income YTD'. Pass includeAccrued:true to also count pending/accrued rewards alongside realised ones.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      from: { type: "string", description: "Start date, ISO 8601 (default Jan 1 of current year)" },
+      to: { type: "string", description: "End date, ISO 8601 (default now)" },
+      symbol: { type: "string", description: "Optional asset symbol filter, e.g. ETH" },
+      includeAccrued: { type: "boolean", description: "Also count pending/accrued rewards (default false — realised only)" },
+    },
+    additionalProperties: false,
+  },
+  annotations: RO,
+  handler: async (ctx, a = {}) => {
+    const from = a.from || defaultRewardsFrom();
+    const to = a.to || new Date().toISOString();
+    const days = Math.max(1, (Date.parse(to) - Date.parse(from)) / 86_400_000);
+    const txs = await fetchStakingHistory(ctx, { from, to });
+
+    // Aggregate per asset.
+    const byAsset = new Map();
+    const slot = (assetId, sym, net) => {
+      if (!byAsset.has(assetId)) {
+        byAsset.set(assetId, {
+          assetId, symbol: sym, network: net,
+          rewards: new Decimal(0), rewardsUsd: new Decimal(0),
+          principal: new Decimal(0), principalUsd: new Decimal(0),
+        });
+      }
+      return byAsset.get(assetId);
+    };
+
+    for (const tx of txs) {
+      const events = (tx && tx._embedded && tx._embedded.events) || [];
+      for (const ev of events) {
+        if (!ev || !ev.assetId) continue;
+        const s = slot(ev.assetId, ev.symbol, ev.networkId);
+        const isReward = REWARD_EVENT_TYPES.has(ev.eventType) || (a.includeAccrued && ev.eventType === ACCRUED_EVENT_TYPE);
+        if (isReward) {
+          s.rewards = s.rewards.plus(dec(ev.amount));
+          s.rewardsUsd = s.rewardsUsd.plus(dec(ev.usdAmount));
+        } else if (ev.eventType === "stake-delegation") {
+          s.principal = s.principal.plus(dec(ev.amount));
+          s.principalUsd = s.principalUsd.plus(dec(ev.usdAmount));
+        } else if (ev.eventType === "stake-undelegation") {
+          s.principal = s.principal.minus(dec(ev.amount));
+          s.principalUsd = s.principalUsd.minus(dec(ev.usdAmount));
+        }
+      }
+    }
+
+    const usd = (d) => new Decimal(d).toDecimalPlaces(2).toString();
+    let rows = [...byAsset.values()].map((r) => {
+      const periodPct = r.principalUsd.gt(0)
+        ? r.rewardsUsd.div(r.principalUsd).times(100).toDecimalPlaces(2).toString()
+        : null;
+      const aprPct = periodPct != null
+        ? new Decimal(periodPct).times(365 / days).toDecimalPlaces(2).toString()
+        : null;
+      return {
+        symbol: r.symbol, network: r.network, assetId: r.assetId,
+        rewards: r.rewards.toString(),
+        rewardsUsd: usd(r.rewardsUsd),
+        principal: r.principal.toString(),
+        principalUsd: usd(r.principalUsd),
+        periodPct, aprPct,
+      };
+    });
+
+    if (a.symbol) {
+      const s = a.symbol.toUpperCase();
+      rows = rows.filter((p) => (p.symbol || "").toUpperCase() === s);
+    }
+    rows.sort((x, y) => new Decimal(y.rewardsUsd).cmp(new Decimal(x.rewardsUsd)));
+
+    const totalRewardsUsd = rows.reduce((s, r) => s.plus(new Decimal(r.rewardsUsd)), new Decimal(0));
+    const totalPrincipalUsd = rows.reduce((s, r) => s.plus(new Decimal(r.principalUsd)), new Decimal(0));
+    const totalsAprPct = totalPrincipalUsd.gt(0)
+      ? totalRewardsUsd.div(totalPrincipalUsd).times(100).times(365 / days).toDecimalPlaces(2).toString()
+      : null;
+
+    return {
+      from, to, days: Math.round(days * 10) / 10,
+      positions: rows,
+      totals: {
+        rewardsUsd: usd(totalRewardsUsd),
+        principalUsd: usd(totalPrincipalUsd),
+        aprPct: totalsAprPct,
+      },
+      transactionsScanned: txs.length,
+      note: "APR is a simple annualised estimate (rewards / principal × 365 / days). Live yields vary — check the protocol dashboard for current rates.",
+    };
+  },
+};
+
+export const compositeTools = [costBasisTool, stakingOpportunitiesTool, stakingRewardsTool];

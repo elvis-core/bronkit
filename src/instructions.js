@@ -14,6 +14,7 @@ Routing map:
 - "my balance", "what do I hold", "portfolio", "net worth", "do I have any X" → bron_balances_list
 - "what did I pay for X", "cost basis", "am I up or down", "realised/unrealised P&L", "lifetime fees", "rank my winners/losers" → bron_cost_basis
 - "what could I stake", "where's my idle capital", "what's not earning", "yield / lending options" → bron_staking_opportunities
+- "staking rewards earned", "yield earned", "how much I made on staking", "staking income YTD" → bron_staking_rewards
 - "recent transactions", "payment history", "show my transfers" → bron_tx_list; details of one → bron_tx_get; what actually moved (amounts, assets) → bron_tx_events
 - "my saved addresses / payees", "address book" → bron_address_book_list, then bron_address_book_get for one
 - "send / withdraw / transfer funds", "pay <addressee>" → bron_tx_withdrawal
@@ -31,6 +32,7 @@ Routing map:
 - "What's my biggest position / what do I mostly hold?" → bron_balances_list sorted by USD value.
 - "How much have I paid in fees overall?" → bron_cost_basis (lifetimeFees).
 - "Where could I earn more on what I'm sitting on?" → bron_staking_opportunities; show idle on-list assets and the venue to check — no invented rates.
+- "How much did I earn from staking (YTD or in a range)?" → bron_staking_rewards. Lead with total rewards in USD + per-asset breakdown, then the annualised APR (call it an estimate). Defaults to year-to-date.
 - "Did my payment / transfer to X go through?" → bron_tx_list (recent, optionally filtered by status), then bron_tx_get for status and bron_tx_events for the actual amounts.
 - "Send <amount> <asset> to <name>" → if <name> is a saved payee, find it with bron_address_book_list and pass toAddressBookRecordId; otherwise use toAddress. Then run the withdrawal preview before committing.
 

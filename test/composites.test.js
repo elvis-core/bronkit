@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { costBasisTool, stakingOpportunitiesTool } from "../src/tools/composites.js";
+import { costBasisTool, stakingOpportunitiesTool, stakingRewardsTool } from "../src/tools/composites.js";
 
 // Mock client: one page of history (buy 1 ETH @ $100, sell 0.5 ETH @ $75),
 // then a USD price of $200/ETH. Exercises the whole handler — pagination,
@@ -125,4 +125,72 @@ test("staking_opportunities: symbol filter restricts results", async () => {
   const r = await stakingOpportunitiesTool.handler(mockStakingCtx(), { symbol: "eth" });
   assert.equal(r.positions.length, 1);
   assert.equal(r.positions[0].symbol, "ETH");
+});
+
+// Mock client for staking rewards: one stake-delegation tx (principal 10 ETH
+// $20k) + one stake-claim tx with an embedded stake-earn-reward (0.5 ETH $1000).
+// Exercises API-level filter, event aggregation, APR math, totals.
+function mockRewardsCtx() {
+  return {
+    workspaceId: "ws_test",
+    client: {
+      async get(path, q) {
+        if (path.endsWith("/transactions")) {
+          if (q && q.offset && q.offset > 0) return { transactions: [] };
+          return {
+            transactions: [
+              {
+                transactionType: "stake-delegation",
+                _embedded: {
+                  events: [
+                    { eventType: "stake-delegation", assetId: "E", symbol: "ETH", networkId: "ETH", amount: "10", usdAmount: "20000", createdAt: "2026-01-15" },
+                  ],
+                },
+              },
+              {
+                transactionType: "stake-claim",
+                _embedded: {
+                  events: [
+                    { eventType: "stake-earn-reward", assetId: "E", symbol: "ETH", networkId: "ETH", amount: "0.5", usdAmount: "1000", createdAt: "2026-06-15" },
+                  ],
+                },
+              },
+            ],
+          };
+        }
+        return {};
+      },
+    },
+  };
+}
+
+test("staking_rewards: aggregates events, computes APR estimate", async () => {
+  const r = await stakingRewardsTool.handler(mockRewardsCtx(), {
+    from: "2026-01-01T00:00:00Z",
+    to: "2026-07-01T00:00:00Z",
+  });
+  assert.equal(r.positions.length, 1);
+  const eth = r.positions[0];
+  assert.equal(eth.symbol, "ETH");
+  assert.equal(eth.rewards, "0.5");
+  assert.equal(eth.rewardsUsd, "1000");
+  assert.equal(eth.principal, "10");
+  assert.equal(eth.principalUsd, "20000");
+  assert.equal(eth.periodPct, "5"); // 1000 / 20000 × 100
+  // days = 181 (Jan 1 → Jul 1). APR ≈ 5 × 365/181 ≈ 10.08.
+  const apr = parseFloat(eth.aprPct);
+  assert.ok(apr > 10 && apr < 10.5, `APR was ${eth.aprPct}`);
+  assert.equal(r.totals.rewardsUsd, "1000");
+  assert.equal(r.totals.principalUsd, "20000");
+  assert.equal(r.transactionsScanned, 2);
+});
+
+test("staking_rewards: symbol filter restricts results", async () => {
+  const r = await stakingRewardsTool.handler(mockRewardsCtx(), {
+    from: "2026-01-01T00:00:00Z",
+    to: "2026-07-01T00:00:00Z",
+    symbol: "btc",
+  });
+  assert.equal(r.positions.length, 0);
+  assert.equal(r.totals.rewardsUsd, "0");
 });
