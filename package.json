@@ -1,6 +1,6 @@
 {
   "name": "bronkit",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "private": true,
   "type": "module",
   "description": "Bronkit — a Claude Desktop MCP server for Bron treasury operations.",
