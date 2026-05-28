@@ -62,3 +62,44 @@ test("balances includeDust: adds a compact dust list alongside the summary", asy
     [["TINY", "0.1"], ["SPAM", null]],
   );
 });
+
+// Mock with two priced assets so weights are non-trivial: ETH 1.5 × $200 = $300
+// (75%), USDC 100 × $1 = $100 (25%). Plus one dust row to keep the filter honest.
+function mockMultiCtx() {
+  return {
+    workspaceId: "ws_test",
+    client: {
+      async get(path) {
+        if (path.endsWith("/balances")) {
+          return {
+            balances: [
+              { assetId: "E", symbol: "ETH", networkId: "ETH", totalBalance: "1.5" },
+              { assetId: "U", symbol: "USDC", networkId: "ETH", totalBalance: "100" },
+              { assetId: "T", symbol: "TINY", networkId: "ETH", totalBalance: "100" },
+            ],
+          };
+        }
+        if (path === "/dictionary/asset-market-prices") {
+          return {
+            prices: [
+              { baseAssetId: "E", quoteSymbolId: "s09", price: "200" },
+              { baseAssetId: "U", quoteSymbolId: "s09", price: "1" },
+              { baseAssetId: "T", quoteSymbolId: "s09", price: "0.001" },
+            ],
+          };
+        }
+        return {};
+      },
+    },
+  };
+}
+
+test("balances: weightPct per priced row + totals.holdingsValue", async () => {
+  const r = await balances.handler(mockMultiCtx(), {});
+  assert.deepEqual(r.balances.map((b) => b.symbol), ["ETH", "USDC"]);
+  const eth = r.balances.find((b) => b.symbol === "ETH");
+  const usdc = r.balances.find((b) => b.symbol === "USDC");
+  assert.equal(eth.weightPct, "75"); // 300 / 400
+  assert.equal(usdc.weightPct, "25"); // 100 / 400
+  assert.equal(r.totals.holdingsValue, 400);
+});

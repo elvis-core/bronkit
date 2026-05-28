@@ -49,7 +49,7 @@ export const readTools = [
     name: "bron_balances_list",
     title: "Portfolio / balances",
     description:
-      "Your holdings as a USD-priced portfolio (balances across all accounts). Unpriced / sub-threshold dust rows are dropped by default and returned as a compact dustSummary; pass includeDust:true to also get the dust list. Use for 'my balance', 'what do I hold', 'portfolio', 'net worth'. Read-only.",
+      "Your holdings as a USD-priced portfolio (balances across all accounts). Each kept row carries a weightPct (% of total holdings); the portfolio total is in totals.holdingsValue. Unpriced / sub-threshold dust rows are dropped by default and returned as a compact dustSummary; pass includeDust:true to also get the dust list. Use for 'my balance', 'what do I hold', 'portfolio', 'net worth'. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -77,6 +77,18 @@ export const readTools = [
         const dust = [];
         for (const r of data.balances) (keepBalance(r, threshold) ? kept : dust).push(r);
         data.balances = kept;
+        // Portfolio weights: % of total holdings USD per kept row + a totals.holdingsValue.
+        const totalUsd = kept.reduce((s, r) => {
+          const v = Number(r && r._embedded ? r._embedded.usdValue : NaN);
+          return Number.isFinite(v) ? s + v : s;
+        }, 0);
+        for (const r of kept) {
+          const v = Number(r && r._embedded ? r._embedded.usdValue : NaN);
+          if (Number.isFinite(v) && totalUsd > 0) {
+            r.weightPct = (Math.round((v / totalUsd) * 10000) / 100).toString();
+          }
+        }
+        data.totals = { holdingsValue: Math.round(totalUsd * 100) / 100 };
         // Always summarise dust compactly so even the default answer can mention it
         // without the model rendering dozens of tiny rows (keeps includeDust fast too).
         const dustUsd = dust.reduce((s, r) => {
