@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { costBasisTool, stakingOpportunitiesTool, stakingRewardsTool } from "../src/tools/composites.js";
+import { accountsOverviewTool, costBasisTool, stakingOpportunitiesTool, stakingRewardsTool } from "../src/tools/composites.js";
 
 // Mock client: one page of history (buy 1 ETH @ $100, sell 0.5 ETH @ $75),
 // then a USD price of $200/ETH. Exercises the whole handler — pagination,
@@ -90,7 +90,8 @@ function mockStakingCtx() {
 }
 
 test("staking_opportunities: idle proration, classification, locked-survives filter, totals", async () => {
-  const r = await stakingOpportunitiesTool.handler(mockStakingCtx(), {});
+  // includeOffList:true to keep BRON (off-list) in positions for these legacy assertions.
+  const r = await stakingOpportunitiesTool.handler(mockStakingCtx(), { includeOffList: true });
   // Sorted by idle USD desc: USDT(500), ETH(400), BRON(100), SOL(80), DOT(0-but-locked).
   assert.deepEqual(r.positions.map((p) => p.symbol), ["USDT", "ETH", "BRON", "SOL", "DOT"]);
 
@@ -100,7 +101,7 @@ test("staking_opportunities: idle proration, classification, locked-survives fil
   assert.equal(eth.idleUsd, "400"); // 400 × (2/2)
   assert.equal(eth.eligible, true);
   assert.equal(eth.bucket, "native-staking");
-  assert.match(eth.recommendation, /Native staking on ETH/);
+  assert.match(eth.recommendation, /Native staking/);
 
   const sol = r.positions.find((p) => p.symbol === "SOL");
   assert.equal(sol.locked, "6"); // 10 − 4
@@ -110,7 +111,7 @@ test("staking_opportunities: idle proration, classification, locked-survives fil
   const bron = r.positions.find((p) => p.symbol === "BRON");
   assert.equal(bron.eligible, false);
   assert.equal(bron.bucket, null);
-  assert.equal(bron.recommendation, "BRON — not on the verified stakeable list. Check protocol docs before considering.");
+  assert.equal(bron.recommendation, "Off-list — check protocol docs");
 
   // Fully-locked row survives the filter on locked>0 even though idleUsd is 0.
   const dot = r.positions.find((p) => p.symbol === "DOT");
@@ -193,4 +194,96 @@ test("staking_rewards: symbol filter restricts results", async () => {
   });
   assert.equal(r.positions.length, 0);
   assert.equal(r.totals.rewardsUsd, "0");
+});
+
+// Capturing mock for the date-format regression test.
+function mockRewardsCaptureCtx() {
+  const calls = [];
+  return {
+    calls,
+    workspaceId: "ws_test",
+    client: {
+      async get(path, q) {
+        calls.push({ path, q });
+        if (path.endsWith("/transactions")) return { transactions: [] };
+        return {};
+      },
+    },
+  };
+}
+
+test("staking_rewards: sends createdAtFrom/To as Unix-ms strings (not ISO)", async () => {
+  const ctx = mockRewardsCaptureCtx();
+  await stakingRewardsTool.handler(ctx, {
+    from: "2026-01-01T00:00:00Z",
+    to: "2026-07-01T00:00:00Z",
+  });
+  const call = ctx.calls.find((c) => c.path.endsWith("/transactions"));
+  assert.ok(call, "expected a /transactions call");
+  // 2026-01-01T00:00:00Z = 1767225600000 ; 2026-07-01T00:00:00Z = 1782864000000
+  assert.equal(call.q.createdAtFrom, "1767225600000");
+  assert.equal(call.q.createdAtTo, "1782864000000");
+});
+
+test("staking_opportunities default: off-list rows excluded, summarised separately", async () => {
+  const r = await stakingOpportunitiesTool.handler(mockStakingCtx(), {});
+  // BRON is off-list and should not appear in positions by default.
+  assert.ok(!r.positions.some((p) => p.symbol === "BRON"), "BRON should be hidden by default");
+  // Eligible rows remain.
+  assert.deepEqual(r.positions.map((p) => p.symbol).sort(), ["DOT", "ETH", "SOL", "USDT"]);
+  // Summary captures the off-list aggregate.
+  assert.equal(r.offListSummary.count, 1);
+  assert.equal(r.offListSummary.idleUsd, "100");
+  assert.deepEqual(r.offListSummary.symbols, ["BRON"]);
+});
+
+// Mock for bron_accounts_overview: two accounts, balances split across them.
+function mockOverviewCtx() {
+  return {
+    workspaceId: "ws_test",
+    client: {
+      async get(path) {
+        if (path.endsWith("/accounts")) {
+          return {
+            accounts: [
+              { accountId: "a1", accountName: "Main", accountType: "vault", status: "active" },
+              { accountId: "a2", accountName: "DeFi", accountType: "vault", status: "active" },
+            ],
+          };
+        }
+        if (path.endsWith("/balances")) {
+          return {
+            balances: [
+              { accountId: "a1", assetId: "E", symbol: "ETH", networkId: "ETH", totalBalance: "1" },
+              { accountId: "a1", assetId: "U", symbol: "USDC", networkId: "ETH", totalBalance: "500" },
+              { accountId: "a2", assetId: "E", symbol: "ETH", networkId: "ETH", totalBalance: "0.05" },
+            ],
+          };
+        }
+        if (path === "/dictionary/asset-market-prices") {
+          return {
+            prices: [
+              { baseAssetId: "E", quoteSymbolId: "s09", price: "2000" },
+              { baseAssetId: "U", quoteSymbolId: "s09", price: "1" },
+            ],
+          };
+        }
+        return {};
+      },
+    },
+  };
+}
+
+test("accounts_overview: per-account totals + portfolio total, sorted desc", async () => {
+  const r = await accountsOverviewTool.handler(mockOverviewCtx());
+  // Main: ETH 1×$2000 + USDC 500×$1 = $2500; DeFi: ETH 0.05×$2000 = $100. Total $2600.
+  assert.deepEqual(r.accounts.map((a) => a.accountName), ["Main", "DeFi"]);
+  const main = r.accounts.find((a) => a.accountName === "Main");
+  const defi = r.accounts.find((a) => a.accountName === "DeFi");
+  assert.equal(main.totalUsd, 2500);
+  assert.equal(main.assetCount, 2);
+  assert.equal(defi.totalUsd, 100);
+  assert.equal(defi.assetCount, 1);
+  assert.equal(r.totals.holdingsValue, 2600);
+  assert.equal(r.totals.accountCount, 2);
 });

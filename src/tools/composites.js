@@ -105,19 +105,13 @@ const STAKE_BUCKETS = {
 function classifyIdle(symbol) {
   const s = (symbol || "").toUpperCase();
   if (STAKE_BUCKETS["native-staking"].has(s)) {
-    return {
-      bucket: "native-staking",
-      recommendation: `Native staking on ${symbol} — see validator marketplaces or liquid-staking protocols`,
-    };
+    return { bucket: "native-staking", recommendation: `Native staking (${symbol})` };
   }
   if (STAKE_BUCKETS["stable-lending"].has(s) || STAKE_BUCKETS["btc-lending"].has(s)) {
     const bucket = STAKE_BUCKETS["stable-lending"].has(s) ? "stable-lending" : "btc-lending";
-    return { bucket, recommendation: "Lend on Aave or Compound — see the Aave dashboard for current rates" };
+    return { bucket, recommendation: bucket === "stable-lending" ? "Stable lending (Aave / Compound)" : "BTC lending (Aave / Compound)" };
   }
-  return {
-    bucket: null,
-    recommendation: `${symbol} — not on the verified stakeable list. Check protocol docs before considering.`,
-  };
+  return { bucket: null, recommendation: "Off-list — check protocol docs" };
 }
 
 const dec = (v) => {
@@ -138,6 +132,7 @@ export const stakingOpportunitiesTool = {
     properties: {
       symbol: { type: "string", description: "Optional: restrict to one asset symbol, e.g. ETH" },
       includeDust: { type: "boolean", description: "Include sub-threshold idle positions (default false)" },
+      includeOffList: { type: "boolean", description: "Include off-list assets (CC, BRON, ZAMA, …) in positions (default false; off-list is summarised separately to keep responses fast)" },
     },
     additionalProperties: false,
   },
@@ -187,15 +182,31 @@ export const stakingOpportunitiesTool = {
     rows.sort((x, y) => new Decimal(y.idleUsd).cmp(new Decimal(x.idleUsd)));
 
     const sumIdle = (list) => usd(list.reduce((s, p) => s.plus(new Decimal(p.idleUsd)), new Decimal(0)));
+
+    // Off-list rows are advisory-only (no actionable recommendation) and bloat
+    // the response. Hide them by default; surface as a one-line summary.
+    let offListSummary;
+    if (!a.includeOffList) {
+      const offRows = rows.filter((p) => !p.eligible);
+      rows = rows.filter((p) => p.eligible);
+      offListSummary = {
+        count: offRows.length,
+        idleUsd: sumIdle(offRows),
+        symbols: offRows.map((p) => p.symbol).filter(Boolean),
+      };
+    }
+
     const totals = {
-      idleUsd: sumIdle(rows), // total deployable idle USD across all rows
+      idleUsd: sumIdle(rows), // total deployable idle USD across kept rows
       eligibleIdleUsd: sumIdle(rows.filter((p) => p.eligible)), // idle USD on assets we can act on
     };
-    return {
+    const result = {
       positions: rows,
       totals,
-      note: "APY/yield is not quoted — check the linked protocol dashboards for live rates.",
+      note: "Live APY/yield rates are deliberately not included. Tell the user to check the venue's dashboard themselves (Aave for lending, validator marketplaces for staking). DO NOT web-search for current rates — they vary and the user knows where to look.",
     };
+    if (offListSummary) result.offListSummary = offListSummary;
+    return result;
   },
 };
 
@@ -214,12 +225,16 @@ function defaultRewardsFrom() {
 async function fetchStakingHistory(ctx, { from, to }) {
   const all = [];
   const transactionTypes = "stake-claim,stake-earn-reward,stake-take-reward,stake-delegation,stake-undelegation";
+  // Bron's createdAtFrom / createdAtTo use format `date-time-millis` — Unix
+  // milliseconds as a string. ISO 8601 strings cause a 500. Convert here.
+  const createdAtFrom = String(Date.parse(from));
+  const createdAtTo = String(Date.parse(to));
   for (let page = 0, offset = 0; page < MAX_PAGES; page++, offset += PAGE) {
     const resp = await ctx.client.get(`${ws(ctx)}/transactions`, {
       transactionStatuses: "completed,partially-completed",
       transactionTypes,
-      createdAtFrom: from,
-      createdAtTo: to,
+      createdAtFrom,
+      createdAtTo,
       includeEvents: true,
       limit: PAGE,
       offset,
@@ -329,4 +344,62 @@ export const stakingRewardsTool = {
   },
 };
 
-export const compositeTools = [costBasisTool, stakingOpportunitiesTool, stakingRewardsTool];
+// Accounts overview — one-call summary for "what accounts do I have and what
+// are my balances": per-account name + total USD + asset count. Server-side
+// fetches accounts + priced balances in parallel and joins, so the model gets
+// exactly the per-account shape (not a per-asset enumeration) in a single call.
+
+export const accountsOverviewTool = {
+  name: "bron_accounts_overview",
+  title: "Accounts overview (per-account totals)",
+  description:
+    "One-call summary of your accounts (vaults) with each account's USD total and priced-asset count. Read-only. Use for 'my accounts and balances', 'what accounts do I have', 'list my accounts with totals'. Faster than calling accounts_list + balances_list separately, and the response is intentionally per-account (no per-asset breakdown) — for the asset breakdown, use bron_balances_list.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  annotations: RO,
+  handler: async (ctx) => {
+    const [accountsResp, balancesResp] = await Promise.all([
+      ctx.client.get(`${ws(ctx)}/accounts`),
+      ctx.client.get(`${ws(ctx)}/balances`, { nonEmpty: true }),
+    ]);
+    await attachUsdPrices(ctx.client, balancesResp);
+    const accounts = (accountsResp && accountsResp.accounts) || [];
+    const balances = (balancesResp && Array.isArray(balancesResp.balances) && balancesResp.balances) || [];
+
+    // Group priced balances by accountId.
+    const byAcc = new Map();
+    for (const b of balances) {
+      if (!b || !b.accountId) continue;
+      const v = Number(b._embedded ? b._embedded.usdValue : NaN);
+      if (!Number.isFinite(v)) continue;
+      const slot = byAcc.get(b.accountId) || { totalUsd: 0, assets: 0 };
+      slot.totalUsd += v;
+      slot.assets += 1;
+      byAcc.set(b.accountId, slot);
+    }
+
+    let portfolioUsd = 0;
+    const rows = accounts.map((a) => {
+      const slot = byAcc.get(a.accountId) || { totalUsd: 0, assets: 0 };
+      portfolioUsd += slot.totalUsd;
+      return {
+        accountId: a.accountId,
+        accountName: a.accountName,
+        accountType: a.accountType,
+        status: a.status,
+        totalUsd: Math.round(slot.totalUsd * 100) / 100,
+        assetCount: slot.assets,
+      };
+    });
+    rows.sort((x, y) => y.totalUsd - x.totalUsd);
+
+    return {
+      accounts: rows,
+      totals: {
+        holdingsValue: Math.round(portfolioUsd * 100) / 100,
+        accountCount: rows.length,
+      },
+    };
+  },
+};
+
+export const compositeTools = [costBasisTool, stakingOpportunitiesTool, stakingRewardsTool, accountsOverviewTool];

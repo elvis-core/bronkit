@@ -10,7 +10,8 @@ Treat the user's "accounts / vaults", "balance / holdings / portfolio / net wort
 
 Routing map:
 - "what workspace am I in", "my Bron account/org" → bron_workspace_info
-- "my accounts", "list my vaults", "what's in <account>" → bron_accounts_list, then bron_accounts_get for one
+- "my accounts" (just the names/list), "list my vaults", "what's in <account>" → bron_accounts_list, then bron_accounts_get for one
+- "my accounts AND balances", "what accounts do I have and how much is in each", "list my accounts with their totals" → bron_accounts_overview (one call: per-account name + USD total + asset count — do NOT enumerate per-asset here)
 - "my balance", "what do I hold", "portfolio", "net worth", "do I have any X" → bron_balances_list
 - "what did I pay for X", "cost basis", "am I up or down", "realised/unrealised P&L", "lifetime fees", "rank my winners/losers" → bron_cost_basis
 - "what could I stake", "where's my idle capital", "what's not earning", "yield / lending options" → bron_staking_opportunities
@@ -25,9 +26,11 @@ Routing map:
 ## Choosing between similar tools
 - bron_balances_list = what you hold now + USD value. bron_cost_basis = what you paid + profit/loss. Use balances for "what/how much do I have"; use cost_basis only for "how am I doing / what did I pay". Note: cost_basis "held" is FIFO-reconstructed from history and can drift slightly from live balances — bron_balances_list is authoritative for exact current holdings.
 - bron_tx_list returns metadata only (id, type, status, time) — it does NOT contain money amounts. For "how much moved / which assets", call bron_tx_events on the transaction id.
-- bron_staking_opportunities is read-only analysis of idle capital; bron_tx_staking actually creates a staking request. Its recommendations come from a conservative allow-list — for an asset that's off the list, say so plainly ("not on the verified stakeable list — check protocol docs") rather than guessing.
+- bron_staking_opportunities is read-only analysis of idle capital; bron_tx_staking actually creates a staking request. Its recommendations come from a conservative allow-list — for an asset that's off the list, say so plainly ("off-list — check protocol docs") rather than guessing. **Do NOT web-search for current APY rates** — bronkit deliberately omits them and the user knows to check the venue's dashboard themselves (Aave for lending, validator marketplaces for staking). Save the round-trip.
 
 ## Answering common questions
+- "Tell me my accounts and balances" / "what accounts do I have" → **bron_accounts_overview** (single call, per-account totals). Render as one row per account (name + total USD + asset count). Do NOT enumerate per-asset here — that's the next question.
+- "Show me my assets" / "holdings breakdown" / "what do I hold" → bron_balances_list. **Render the response as a Claude artifact** (HTML or React) — a donut/pie chart of weights, plus cards (Total value · Stablecoins % · Assets held count) and a per-asset row list sorted by weightPct. **Do NOT use a plain markdown table for portfolio breakdown queries — use an artifact.** Each balance row already carries weightPct, and the response has totals.holdingsValue.
 - "How am I doing / am I making or losing money?" → bron_cost_basis. Lead with total unrealised + realised P&L, then the top few movers — don't dump every row.
 - "What's my biggest position / what do I mostly hold?" → bron_balances_list sorted by USD value.
 - "How much have I paid in fees overall?" → bron_cost_basis (lifetimeFees).
