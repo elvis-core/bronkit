@@ -10,7 +10,7 @@ Portfolio, cost basis, staking opportunities, transactions, saved addresses, and
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
 
-### [⬇ Download the latest `.mcpb`](https://github.com/elvis-core/bronkit/releases/latest)
+### [⬇ Download the latest `.mcpb`](https://github.com/elvis-core/bronkit/releases/latest/download/bronkit.mcpb)
 
 </div>
 
@@ -93,7 +93,7 @@ Keep both — you'll need them at install time. After Bronkit is configured, you
 <summary><b>3. Install Bronkit</b> — download the <code>.mcpb</code> and double-click</summary>
 <br>
 
-1. Download the latest **`bronkit.mcpb`** from [Releases](https://github.com/elvis-core/bronkit/releases/latest).
+1. [**Download the latest `bronkit.mcpb`**](https://github.com/elvis-core/bronkit/releases/latest/download/bronkit.mcpb) (direct download — no clicks needed on the Releases page).
 2. **Open Claude Desktop first** if it isn't already running — the window must be visible on screen, not just a dot under the Dock icon.
 
    > ⚠️ If Claude Desktop is closed, double-clicking the `.mcpb` does nothing. Open the app first, then double-click.
