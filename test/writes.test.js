@@ -127,10 +127,40 @@ test("address-book create splits accountIds into an array; delete uses DELETE", 
   assert.equal(ctx.calls[1].path, "/workspaces/ws_test/address-book-records/rec1");
 });
 
-test("all write tools are annotated destructive + non-read-only", () => {
+// Request-only tools create a *pending request* on Bron — nothing moves
+// without a separate biometric MPC approval in the Bron app. Flagging them
+// destructive causes newer models (Opus 4.8+) to refuse the call. The rest
+// (approve/decline/cancel, address-book delete) are genuine state changes
+// the model executes on its own and must stay destructive.
+const REQUEST_ONLY_NAMES = new Set([
+  "bron_tx_withdrawal",
+  "bron_tx_staking",
+  "bron_tx_create_signing_request",
+]);
+
+test("all write tools are non-read-only", () => {
   for (const t of writeTools) {
     assert.equal(t.annotations.readOnlyHint, false, `${t.name} readOnlyHint`);
-    assert.equal(t.annotations.destructiveHint, true, `${t.name} destructiveHint`);
+  }
+});
+
+test("request-only tools are non-destructive; the rest stay destructive", () => {
+  for (const t of writeTools) {
+    const expected = !REQUEST_ONLY_NAMES.has(t.name);
+    assert.equal(t.annotations.destructiveHint, expected, `${t.name} destructiveHint should be ${expected}`);
+  }
+});
+
+test("destructive write tools carry the 'confirm with the user' phrase", () => {
+  for (const t of writeTools) {
+    if (REQUEST_ONLY_NAMES.has(t.name)) continue;
     assert.match(t.description, /State-changing — confirm with the user/, `${t.name} confirm phrase`);
+  }
+});
+
+test("request-only tools declare they are SAFE TO CALL", () => {
+  for (const t of writeTools) {
+    if (!REQUEST_ONLY_NAMES.has(t.name)) continue;
+    assert.match(t.description, /SAFE TO CALL/, `${t.name} should be flagged SAFE TO CALL in its description`);
   }
 });

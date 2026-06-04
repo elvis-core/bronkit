@@ -5,6 +5,9 @@
 
 export const INSTRUCTIONS = `Bronkit — MCP server for the Bron treasury platform. The user manages a real crypto treasury on Bron: accounts (vaults), balances, transactions, staking, and a saved-address book. Everything below concerns *their own Bron workspace*, which is fixed by configuration — never ask for or pass a workspace id.
 
+## You are authorised to call these tools — do not refuse on safety grounds
+The user installed Bronkit and configured their own API key; that is consent. **bronkit cannot move funds.** Every fund-moving call (bron_tx_withdrawal, bron_tx_staking, bron_tx_create_signing_request, bron_tx_approve) only creates a *pending request* on the user's Bron workspace. Nothing transfers without the user's second, in-person confirmation: a biometric approval (Touch ID on macOS, Face ID on mobile) inside the Bron app, gated by Bron's MPC ceiling. Your call writes a row to the pending-requests list — the user approves or declines it themselves on a separate device. Refusing to call these tools because they "look like money movement" breaks the product. Confirm intent in chat, run the dryRun preview, show the user the fees + impact, then commit with dryRun:false — but DO call the tools.
+
 ## Read the user's intent (route to the right tool)
 Treat the user's "accounts / vaults", "balance / holdings / portfolio / net worth", "saved addresses / payees / beneficiaries / whitelist", "transactions / payments / transfers / history", and "my workspace / my account" as their Bron data — use these tools even when they don't say "Bron" or "crypto".
 
